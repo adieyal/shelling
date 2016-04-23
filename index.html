@@ -1,0 +1,189 @@
+<html>
+    <head>
+        <script src="d3.min.js" charset="utf-8"></script>
+        <style>
+            circle.empty {
+                display: none;
+            }
+
+            circle.type_0 {
+                fill: blue;
+            }
+
+            circle.type_1 {
+                fill: red;
+            }
+
+            circle.type_2 {
+                fill: green;
+            }
+
+            circle.type_3 {
+                fill: purple;
+            }
+        </style>
+    </head>
+    <body>
+
+        <h2>Step:<span id="step-no"></span></h2>
+        <div id="container"></div>
+        <script>
+            var width = 900, height = 900, margin = 50;
+            var container = d3.select("#container")
+                .style("border", "solid thin black")
+                .style("width", width)
+                .style("height", height)
+                .style("margin-left", margin)
+            var svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("x", margin)
+
+            var num_races = 4;              // number of races
+            var empty_ratio = 0.3;          // percentage of empty houses
+            var similarity_threshold = 4/8; // anything below this cause family to move house 
+            var grid_length = 75;           // sqrt of the total number of houses */
+            var r = 5;                      // radius of circle 
+            var max_steps = 100;              // maximum number of iterations for the simulation
+
+            var xscale = d3.scale.linear().domain([0, grid_length - 1]).range([r * 2, width - r * 2])
+            var yscale = d3.scale.linear().domain([0, grid_length - 1]).range([r * 2, width - r * 2])
+
+            var gen_grid = function() {
+                var arr = [];
+                var races = [];
+
+                for (var race = 0; race < num_races; race++)
+                    races.push(race);
+
+                for (var x = 0; x < grid_length; x++) {
+                    for (var y = 0; y < grid_length; y++) {
+                        var race = null;
+
+                        if (Math.random() < empty_ratio)
+                            var type = "empty";
+                        else {
+                            race = d3.shuffle(races)[0]
+                            var type = "type_" + race;
+                        }
+
+                        arr.push({
+                            x: x,
+                            y: y,
+                            type: type,
+                            race: race
+                        })
+                    }
+                }
+                return arr;
+            }
+
+            var grid = gen_grid();
+
+            svg.selectAll("circle")
+                .data(grid)
+                .enter()
+                .append("circle")
+                    .attr("cx", function(el) { return xscale(el.x)})
+                    .attr("cy", function(el) { return yscale(el.y)})
+                    .attr("r", r)
+                    .attr("class", function(el) { return el.type})
+                    .classed("shel", true)
+
+            var move_house = function(grid, datum, circle) {
+                var getxy = function(x, y) {
+                    return grid[y * grid_length + x];    
+                }
+
+                var setxy = function(x, y, el) {
+                    grid[y * grid_length + x] = el;    
+                }
+
+                var find_blank = function(datum) {
+                    for (var r = 1; r < grid_length; r++) {
+                        var search_area = [];
+                        for (var cx = datum.x - r; cx <= datum.x + r; cx++) {
+                            for (var cy = datum.y - r; cy <= datum.y + r; cy++) {
+                                if (cx < 0 || cx >= grid_length) continue;
+                                if (cy < 0 || cy >= grid_length) continue;
+                                if (datum.x == cx && datum.y == cy) continue;
+
+                                el = getxy(cx, cy);
+                                if (el.type == "empty") {
+                                    var blank_cell = {
+                                        x : cx,
+                                        y : cy,
+                                        race : datum.race,
+                                        type : datum.type
+                                    };
+                                    if (is_ok(blank_cell)) {
+                                        search_area.push(blank_cell);
+                                    }
+                                }
+                            }
+                        }
+                        if (search_area.length > 0) {
+                            return d3.shuffle(search_area)[0]
+                        }
+                    }
+                    // Don't move if an empty cell can't be found
+                    return {x: x, y: y};
+                }
+
+                var is_ok = function(datum) {
+                    var count = 0;
+                    var count_same = 0;
+                    if (datum.type == "empty") return true;
+                    for (var x = datum.x - 1; x <= datum.x + 1; x++) {
+                        for (var y = datum.y - 1; y <= datum.y + 1; y++) {
+                            if (x < 0 
+                                || x >= grid_length
+                                || y < 0
+                                || y >= grid_length
+                                || (x == datum.x && y == datum.y)
+                            ) {
+                                continue;
+                            }
+                            neighbour = getxy(x, y);
+                            if (neighbour.type != "empty") {
+                                count++;
+                                if (neighbour.race == datum.race)
+                                    count_same++;
+                            }
+                        }
+                    }
+                    if (count == 0) return true;
+                    return count_same / count >= similarity_threshold;
+                }
+
+                if (!is_ok(datum)) {
+                    var blank_xy = find_blank(datum);
+                    var blank_cell = getxy(blank_xy.x, blank_xy.y);
+                    blank_cell.x = datum.x; blank_cell.y = datum.y;
+                    datum.x = blank_xy.x; datum.y = blank_xy.y;
+                    setxy(blank_cell.x, blank_cell.y, blank_cell);
+                    setxy(datum.x, datum.y, datum);
+                    circle.transition()
+                        .attr("cx", xscale(datum.x))
+                        .attr("cy", yscale(datum.y))
+
+                }
+
+            }
+
+            var step = 0;
+            d3.timer(function() {
+                step++;
+                d3.select("#step-no").text(step)
+                if (step > max_steps)
+                    return true;
+
+                d3.selectAll(".shel").each(function(datum) {
+                    move_house(grid, datum, d3.select(this));
+                })
+            })
+
+        </script>
+
+    </body>
+</html>
