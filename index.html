@@ -28,7 +28,8 @@
         <h2>Step:<span id="step-no"></span></h2>
         <div id="container"></div>
         <script>
-            var width = 900, height = 900, margin = 50;
+            var max_radius = 10;
+            var width = 600, height = 600, margin = 50;
             var container = d3.select("#container")
                 .style("border", "solid thin black")
                 .style("width", width)
@@ -39,11 +40,13 @@
                 .attr("height", height)
                 .attr("x", margin)
 
-            var num_races = 4;              // number of races
-            var empty_ratio = 0.3;          // percentage of empty houses
-            var similarity_threshold = 4/8; // anything below this cause family to move house 
+            var neighbourhood_size = 3;
+            var num_races = 2;              // number of races
+            var empty_ratio = 0.5;          // percentage of empty houses
+
+            var similarity_threshold = 6.5/8; // anything below this cause family to move house 
             var grid_length = 75;           // sqrt of the total number of houses */
-            var r = 5;                      // radius of circle 
+            var r = 3.5;                      // radius of circle 
             var max_steps = 100;              // maximum number of iterations for the simulation
 
             var xscale = d3.scale.linear().domain([0, grid_length - 1]).range([r * 2, width - r * 2])
@@ -100,7 +103,7 @@
                 }
 
                 var find_blank = function(datum) {
-                    for (var r = 1; r < grid_length; r++) {
+                    for (var r = 1; r < max_radius; r++) {
                         var search_area = [];
                         for (var cx = datum.x - r; cx <= datum.x + r; cx++) {
                             for (var cy = datum.y - r; cy <= datum.y + r; cy++) {
@@ -127,15 +130,17 @@
                         }
                     }
                     // Don't move if an empty cell can't be found
-                    return {x: x, y: y};
+                    return {x: datum.x, y: datum.y};
                 }
 
-                var is_ok = function(datum) {
-                    var count = 0;
-                    var count_same = 0;
-                    if (datum.type == "empty") return true;
-                    for (var x = datum.x - 1; x <= datum.x + 1; x++) {
-                        for (var y = datum.y - 1; y <= datum.y + 1; y++) {
+                var get_neighbourhood = function(datum) {
+                    return _get_neighbourhood(datum, neighbourhood_size);
+                }
+
+                var _get_neighbourhood = function(datum, radius) {
+                    neighbours = [];
+                    for (var x = datum.x - radius; x <= datum.x + radius; x++) {
+                        for (var y = datum.y - radius; y <= datum.y + radius; y++) {
                             if (x < 0 
                                 || x >= grid_length
                                 || y < 0
@@ -144,14 +149,26 @@
                             ) {
                                 continue;
                             }
-                            neighbour = getxy(x, y);
-                            if (neighbour.type != "empty") {
-                                count++;
-                                if (neighbour.race == datum.race)
-                                    count_same++;
-                            }
+                            neighbours.push(getxy(x, y));
                         }
                     }
+                    return neighbours
+                }
+
+                var is_ok = function(datum) {
+                    var count = 0;
+                    var count_same = 0;
+                    if (datum.type == "empty") return true;
+                    var neighbours = get_neighbourhood(datum);
+                    for (idx in neighbours) {
+                        var neighbour = neighbours[idx];
+                        if (neighbour.type != "empty") {
+                            count++;
+                            if (neighbour.race == datum.race)
+                                count_same++;
+                        }
+                    }
+
                     if (count == 0) return true;
                     return count_same / count >= similarity_threshold;
                 }
@@ -166,8 +183,10 @@
                     circle.transition()
                         .attr("cx", xscale(datum.x))
                         .attr("cy", yscale(datum.y))
+                    return true;
 
                 }
+                return false;
 
             }
 
@@ -178,9 +197,15 @@
                 if (step > max_steps)
                     return true;
 
+                var move_count = 0;
                 d3.selectAll(".shel").each(function(datum) {
-                    move_house(grid, datum, d3.select(this));
+                    is_moved = move_house(grid, datum, d3.select(this));
+                    if (is_moved)
+                        move_count++;
                 })
+                console.log(move_count);
+                if (move_count == 0)
+                    return true;
             })
 
         </script>
